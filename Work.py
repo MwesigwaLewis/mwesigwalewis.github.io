@@ -1,47 +1,15 @@
 from flask import Flask, render_template, request, session, redirect, url_for, jsonify
 import random
 import os
-import ast
-import operator
 from functools import wraps
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "dev-secret-key-change-in-production")
 
-# Safe math evaluation
-ALLOWED_OPS = {
-    ast.Add: operator.add,
-    ast.Sub: operator.sub,
-    ast.Mult: operator.mul,
-    ast.Div: operator.truediv,
-    ast.Pow: operator.pow,
-    ast.Mod: operator.mod,
-    ast.USub: operator.neg,
-    ast.UAdd: operator.pos,
-}
 
-def safe_eval(node):
-    if isinstance(node, ast.Num) or isinstance(node, ast.Constant):
-        return node.n if hasattr(node, 'n') else node.value
-    elif isinstance(node, ast.BinOp):
-        op_type = type(node.op)
-        if op_type not in ALLOWED_OPS:
-            raise ValueError(f"Unsupported operation: {op_type}")
-        return ALLOWED_OPS[op_type](safe_eval(node.left), safe_eval(node.right))
-    elif isinstance(node, ast.UnaryOp):
-        op_type = type(node.op)
-        if op_type not in ALLOWED_OPS:
-            raise ValueError(f"Unsupported unary operation: {op_type}")
-        return ALLOWED_OPS[op_type](safe_eval(node.operand))
-    raise ValueError("Unsupported expression")
-
-def evaluate_expression(expr):
-    try:
-        tree = ast.parse(expr, mode='eval')
-        return safe_eval(tree.body)
-    except Exception as e:
-        raise ValueError(f"Invalid expression: {str(e)}")
-
+# =========================
+# AUTH DECORATOR
+# =========================
 def login_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
@@ -51,6 +19,32 @@ def login_required(f):
     return decorated_function
 
 
+# =========================
+# SAFE CALCULATOR (NO AST)
+# =========================
+def safe_calculate(expr: str):
+    """
+    Very simple safe evaluator:
+    - only allows numbers and basic operators
+    - blocks everything else
+    """
+
+    allowed_chars = "0123456789+-*/().% "
+
+    if any(c not in allowed_chars for c in expr):
+        return "Error"
+
+    try:
+        # safer eval scope
+        result = eval(expr, {"__builtins__": None}, {})
+        return result
+    except:
+        return "Error"
+
+
+# =========================
+# AUTH ROUTE
+# =========================
 @app.route("/", methods=["GET", "POST"])
 def auth():
     if session.get("auth_complete"):
@@ -67,59 +61,40 @@ def auth():
 
         if step == "name":
             name_input = request.form.get("name", "").strip()
-            if not name_input:
-                error = "Name cannot be empty"
-            elif not name_input.replace(" ", "").isalpha():
-                error = "Name can only contain letters and spaces"
-            elif len(name_input) > 50:
-                error = "Name too long (max 50 characters)"
-            else:
+            if name_input:
                 session["name"] = name_input.title()
                 return redirect(url_for("auth"))
+            error = "Enter a valid name"
 
         elif step == "age":
             age_input = request.form.get("age", "").strip()
-            if not age_input:
-                error = "Please enter your age"
-            elif not age_input.isdigit():
-                error = "Age must be a number"
-            else:
+            if age_input.isdigit():
                 age = int(age_input)
-                if age >= 130:
-                    error = "You cannot possibly be older than 129"
-                elif age <= 14:
-                    error = "You must be 15 or older to use this program"
+                if age <= 14:
                     session.clear()
-                    return render_template("index.html", step="blocked", error=error)
-                else:
-                    session["age_verified"] = True
-                    return redirect(url_for("auth"))
+                    return render_template("index.html", step="blocked", error="Too young")
+                session["age_verified"] = True
+                return redirect(url_for("auth"))
+            error = "Invalid age"
 
         elif step == "student":
-            identity = request.form.get("identity", "").strip().lower()
-            if identity == "n":
-                error = "This calculator is designed for students. Access denied."
-                session.clear()
-                return render_template("index.html", step="blocked", error=error)
-            elif identity == "y":
+            identity = request.form.get("identity", "").lower()
+            if identity == "y":
                 session["is_student"] = True
                 return redirect(url_for("auth"))
-            else:
-                error = "Please enter Y for yes or n for no"
+            session.clear()
+            return render_template("index.html", step="blocked", error="Access denied")
 
         elif step == "passcode":
-            code = request.form.get("code", "").strip()
-            verify = request.form.get("verify", "").strip()
-            if len(code) != 4 or not code.isdigit():
-                error = "Passcode must be exactly 4 digits"
-            elif code != verify:
-                error = "Passcodes do not match"
-            elif code == "0000":
-                error = "Passcode too weak"
-            else:
+            code = request.form.get("code", "")
+            verify = request.form.get("verify", "")
+
+            if len(code) == 4 and code == verify and code != "0000":
                 session["passcode"] = code
                 session["auth_complete"] = True
                 return redirect(url_for("calculator"))
+
+            error = "Invalid passcode"
 
     if not name:
         step = "name"
@@ -133,47 +108,44 @@ def auth():
     return render_template("index.html", step=step, name=name, error=error)
 
 
+# =========================
+# CALCULATOR PAGE
+# =========================
 @app.route("/calculator")
 @login_required
 def calculator():
     return render_template("index.html", step="calculator", name=session.get("name"))
 
 
+# =========================
+# CALCULATE API (FIXED)
+# =========================
 @app.route("/calculate", methods=["POST"])
 @login_required
 def calculate():
-    # ✅ FIX: safe JSON parsing for production (Render)
     data = request.get_json(silent=True)
 
     if not data or "expression" not in data:
         return jsonify({"result": "Error"})
 
-    expression = data["expression"].strip()
+    expr = data["expression"].strip()
     passcode = session.get("passcode", "")
 
-    if expression == passcode:
+    # secret feature
+    if expr == passcode:
         return jsonify({"action": "secret"})
 
-    if not expression:
+    if expr == "":
         return jsonify({"result": "0"})
 
-    try:
-        result = evaluate_expression(expression)
+    result = safe_calculate(expr)
 
-        if isinstance(result, float):
-            if result.is_integer():
-                result = int(result)
-            else:
-                result = round(result, 10)
-
-        return jsonify({"result": str(result)})
-
-    except ZeroDivisionError:
-        return jsonify({"result": "Error: ÷0"})
-    except Exception:
-        return jsonify({"result": "Error"})
+    return jsonify({"result": str(result)})
 
 
+# =========================
+# GAME SYSTEM
+# =========================
 @app.route("/game/new", methods=["POST"])
 @login_required
 def new_game():
@@ -181,25 +153,23 @@ def new_game():
     difficulty = data.get("difficulty", "Easy")
 
     settings = {
-        "Easy": {"range": 50, "attempts": 10, "hint": "Hot/Warm/Cold enabled"},
-        "Medium": {"range": 100, "attempts": 7, "hint": "Hot/Warm/Cold enabled"},
-        "Hard": {"range": 200, "attempts": 5, "hint": "Hot/Warm/Cold enabled"},
-        "Nightmare": {"range": 500, "attempts": 5, "hint": "No hints, pure instinct"}
+        "Easy": (50, 10),
+        "Medium": (100, 7),
+        "Hard": (200, 5),
+        "Nightmare": (500, 5)
     }
 
-    selected = settings.get(difficulty, settings["Easy"])
-    secret_number = random.randint(1, selected["range"])
+    max_range, attempts = settings.get(difficulty, settings["Easy"])
 
-    session["secret_number"] = secret_number
-    session["attempts"] = selected["attempts"]
-    session["max_range"] = selected["range"]
-    session["difficulty"] = difficulty
+    session["secret_number"] = random.randint(1, max_range)
+    session["attempts"] = attempts
+    session["max_range"] = max_range
     session["hints_enabled"] = difficulty != "Nightmare"
 
     return jsonify({
-        "attempts": selected["attempts"],
-        "range": selected["range"],
-        "hint": selected["hint"]
+        "attempts": attempts,
+        "range": max_range,
+        "hint": "Game started"
     })
 
 
@@ -207,54 +177,37 @@ def new_game():
 @login_required
 def guess():
     data = request.get_json()
-    guess_input = data.get("guess", "").strip()
-
-    try:
-        guess_val = int(guess_input)
-    except (ValueError, TypeError):
-        return jsonify({"result": "invalid"})
+    guess_val = int(data.get("guess", 0))
 
     secret = session.get("secret_number")
     attempts = session.get("attempts", 0)
     max_range = session.get("max_range", 50)
-    hints_enabled = session.get("hints_enabled", True)
 
     if attempts <= 0:
         return jsonify({"result": "gameover", "number": secret})
-
-    if guess_val < 1 or guess_val > max_range:
-        return jsonify({"result": "outofrange", "max_range": max_range})
-
-    difference = abs(guess_val - secret)
 
     if guess_val == secret:
-        session["attempts"] = 0
         return jsonify({"result": "correct", "number": secret})
 
-    attempts -= 1
-    session["attempts"] = attempts
+    session["attempts"] -= 1
 
-    if hints_enabled:
-        if difference <= 3:
-            hint = "HOT 🔥"
-        elif difference <= 10:
-            hint = "WARM 🌤"
-        else:
-            hint = "COLD ❄"
-    else:
-        hint = "Keep trying..."
-
-    if attempts <= 0:
-        return jsonify({"result": "gameover", "number": secret})
-
-    return jsonify({"result": "wrong", "hint": hint, "attempts": attempts})
+    return jsonify({
+        "result": "wrong",
+        "attempts": session["attempts"]
+    })
 
 
+# =========================
+# LOGOUT
+# =========================
 @app.route("/logout")
 def logout():
     session.clear()
     return redirect(url_for("auth"))
 
 
+# =========================
+# RENDER ENTRY POINT
+# =========================
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
