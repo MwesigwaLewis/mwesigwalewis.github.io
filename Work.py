@@ -50,6 +50,7 @@ def login_required(f):
         return f(*args, **kwargs)
     return decorated_function
 
+
 @app.route("/", methods=["GET", "POST"])
 def auth():
     if session.get("auth_complete"):
@@ -131,16 +132,23 @@ def auth():
 
     return render_template("index.html", step=step, name=name, error=error)
 
+
 @app.route("/calculator")
 @login_required
 def calculator():
     return render_template("index.html", step="calculator", name=session.get("name"))
 
+
 @app.route("/calculate", methods=["POST"])
 @login_required
 def calculate():
-    data = request.get_json()
-    expression = data.get("expression", "").strip()
+    # ✅ FIX: safe JSON parsing for production (Render)
+    data = request.get_json(silent=True)
+
+    if not data or "expression" not in data:
+        return jsonify({"result": "Error"})
+
+    expression = data["expression"].strip()
     passcode = session.get("passcode", "")
 
     if expression == passcode:
@@ -151,51 +159,56 @@ def calculate():
 
     try:
         result = evaluate_expression(expression)
+
         if isinstance(result, float):
             if result.is_integer():
                 result = int(result)
             else:
                 result = round(result, 10)
+
         return jsonify({"result": str(result)})
+
     except ZeroDivisionError:
         return jsonify({"result": "Error: ÷0"})
-    except Exception as e:
+    except Exception:
         return jsonify({"result": "Error"})
+
 
 @app.route("/game/new", methods=["POST"])
 @login_required
 def new_game():
     data = request.get_json()
     difficulty = data.get("difficulty", "Easy")
-    
+
     settings = {
         "Easy": {"range": 50, "attempts": 10, "hint": "Hot/Warm/Cold enabled"},
         "Medium": {"range": 100, "attempts": 7, "hint": "Hot/Warm/Cold enabled"},
         "Hard": {"range": 200, "attempts": 5, "hint": "Hot/Warm/Cold enabled"},
         "Nightmare": {"range": 500, "attempts": 5, "hint": "No hints, pure instinct"}
     }
-    
+
     selected = settings.get(difficulty, settings["Easy"])
     secret_number = random.randint(1, selected["range"])
-    
+
     session["secret_number"] = secret_number
     session["attempts"] = selected["attempts"]
     session["max_range"] = selected["range"]
     session["difficulty"] = difficulty
     session["hints_enabled"] = difficulty != "Nightmare"
-    
+
     return jsonify({
-        "attempts": selected["attempts"], 
+        "attempts": selected["attempts"],
         "range": selected["range"],
         "hint": selected["hint"]
     })
+
 
 @app.route("/game/guess", methods=["POST"])
 @login_required
 def guess():
     data = request.get_json()
     guess_input = data.get("guess", "").strip()
-    
+
     try:
         guess_val = int(guess_input)
     except (ValueError, TypeError):
@@ -236,10 +249,12 @@ def guess():
 
     return jsonify({"result": "wrong", "hint": hint, "attempts": attempts})
 
+
 @app.route("/logout")
 def logout():
     session.clear()
     return redirect(url_for("auth"))
+
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
