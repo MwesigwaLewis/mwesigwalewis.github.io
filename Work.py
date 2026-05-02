@@ -2,9 +2,23 @@ from flask import Flask, render_template, request, session, redirect, url_for, j
 import random
 import os
 from functools import wraps
+import logging
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "dev-secret-key-change-in-production")
+
+# =========================
+# LOGGING SETUP
+# =========================
+logging.basicConfig(
+    level=logging.DEBUG,
+    format="%(asctime)s [%(levelname)s] %(message)s"
+)
+logger = logging.getLogger(__name__)
+
+@app.before_request
+def log_request_info():
+    logger.info(f"{request.method} {request.path}")
 
 
 # =========================
@@ -14,31 +28,29 @@ def login_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
         if not session.get("auth_complete"):
+            logger.warning("Unauthorized access attempt")
             return redirect(url_for("auth"))
         return f(*args, **kwargs)
     return decorated_function
 
 
 # =========================
-# SAFE CALCULATOR (NO AST)
+# SAFE CALCULATOR
 # =========================
 def safe_calculate(expr: str):
-    """
-    Very simple safe evaluator:
-    - only allows numbers and basic operators
-    - blocks everything else
-    """
-
     allowed_chars = "0123456789+-*/().% "
 
+    logger.debug(f"Evaluating: {expr}")
+
     if any(c not in allowed_chars for c in expr):
+        logger.warning("Invalid characters in expression")
         return "Error"
 
     try:
-        # safer eval scope
         result = eval(expr, {"__builtins__": None}, {})
         return result
-    except:
+    except Exception as e:
+        logger.error(f"Calculation error: {expr} | {e}")
         return "Error"
 
 
@@ -57,6 +69,8 @@ def auth():
     is_student = session.get("is_student")
 
     if request.method == "POST":
+        logger.debug(f"Auth step data: {request.form}")
+
         step = request.form.get("step")
 
         if step == "name":
@@ -71,6 +85,7 @@ def auth():
             if age_input.isdigit():
                 age = int(age_input)
                 if age <= 14:
+                    logger.warning("User blocked due to age")
                     session.clear()
                     return render_template("index.html", step="blocked", error="Too young")
                 session["age_verified"] = True
@@ -82,6 +97,7 @@ def auth():
             if identity == "y":
                 session["is_student"] = True
                 return redirect(url_for("auth"))
+            logger.warning("User failed student check")
             session.clear()
             return render_template("index.html", step="blocked", error="Access denied")
 
@@ -92,6 +108,7 @@ def auth():
             if len(code) == 4 and code == verify and code != "0000":
                 session["passcode"] = code
                 session["auth_complete"] = True
+                logger.info("User authentication complete")
                 return redirect(url_for("calculator"))
 
             error = "Invalid passcode"
@@ -114,31 +131,37 @@ def auth():
 @app.route("/calculator")
 @login_required
 def calculator():
+    logger.info("User accessed calculator")
     return render_template("index.html", step="calculator", name=session.get("name"))
 
 
 # =========================
-# CALCULATE API (FIXED)
+# CALCULATE API
 # =========================
 @app.route("/calculate", methods=["POST"])
 @login_required
 def calculate():
     data = request.get_json(silent=True)
+    logger.debug(f"Incoming JSON: {data}")
 
     if not data or "expression" not in data:
+        logger.warning("Invalid request to /calculate")
         return jsonify({"result": "Error"})
 
     expr = data["expression"].strip()
+    logger.info(f"Expression: {expr}")
+
     passcode = session.get("passcode", "")
 
-    # secret feature
     if expr == passcode:
+        logger.info("Secret feature triggered")
         return jsonify({"action": "secret"})
 
     if expr == "":
         return jsonify({"result": "0"})
 
     result = safe_calculate(expr)
+    logger.info(f"Result: {result}")
 
     return jsonify({"result": str(result)})
 
@@ -151,6 +174,8 @@ def calculate():
 def new_game():
     data = request.get_json()
     difficulty = data.get("difficulty", "Easy")
+
+    logger.info(f"New game started: {difficulty}")
 
     settings = {
         "Easy": (50, 10),
@@ -181,7 +206,8 @@ def guess():
 
     secret = session.get("secret_number")
     attempts = session.get("attempts", 0)
-    max_range = session.get("max_range", 50)
+
+    logger.info(f"Guess: {guess_val}, Secret: {secret}, Attempts: {attempts}")
 
     if attempts <= 0:
         return jsonify({"result": "gameover", "number": secret})
@@ -202,12 +228,13 @@ def guess():
 # =========================
 @app.route("/logout")
 def logout():
+    logger.info("User logged out")
     session.clear()
     return redirect(url_for("auth"))
 
 
 # =========================
-# RENDER ENTRY POINT
+# ENTRY POINT
 # =========================
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
