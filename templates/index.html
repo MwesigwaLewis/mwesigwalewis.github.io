@@ -2,13 +2,13 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="google-site-verification" content="hfYIcgc4HM7u05emjQNGW6Nt7kiR4kAMcLX_ASUKVxg" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Makeshift Calc | By Lewis K</title>
   <meta name="description" content="A secure, modern calculator with hidden features">
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 </head>
 <body>
 
@@ -23,10 +23,10 @@
 <div class="auth-box">
   <h2>Welcome</h2>
   <p class="subtitle">How's about we get to know you</p>
-  {% if error %}<p class="error">{{ error }}</p>{% endif %}
+  {% if error %}<<p class="error">{{ error }}</p>{% endif %}
   <form method="POST" autocomplete="off">
     <input type="hidden" name="step" value="name">
-    <input type="text" name="name" placeholder="What is your name?" autofocus autocomplete="name" maxlength="50">
+    <input type="text" name="name" placeholder="What is your name?" autofocus autocomplete="name" maxlength="50" required pattern="[A-Za-z\s]{2,50}">
     <button type="submit">Continue →</button>
   </form>
 </div>
@@ -34,11 +34,11 @@
 {% elif step == "age" %}
 <div class="auth-box">
   <h2>Hi {{ name }}, how old are you?</h2>
-  <p class="subtitle">Age verification required</p>
-  {% if error %}<p class="error">{{ error }}</p>{% endif %}
+  <p class="subtitle">Age verification required (15+)</p>
+  {% if error %}<<p class="error">{{ error }}</p>{% endif %}
   <form method="POST" autocomplete="off">
     <input type="hidden" name="step" value="age">
-    <input type="number" name="age" placeholder="Your age" autofocus min="1" max="129" autocomplete="off">
+    <input type="number" name="age" placeholder="Your age" autofocus min="15" max="129" autocomplete="off" required>
     <button type="submit">Continue →</button>
   </form>
 </div>
@@ -47,10 +47,10 @@
 <div class="auth-box">
   <h2>{{ name }}, are you a student?</h2>
   <p class="subtitle">This tool is designed for educational use</p>
-  {% if error %}<p class="error">{{ error }}</p>{% endif %}
+  {% if error %}<<p class="error">{{ error }}</p>{% endif %}
   <form method="POST" autocomplete="off">
     <input type="hidden" name="step" value="student">
-    <input type="text" name="identity" placeholder="Y or n" maxlength="1" autofocus autocomplete="off" style="text-transform: uppercase;">
+    <input type="text" name="identity" placeholder="Y or n" maxlength="1" autofocus autocomplete="off" style="text-transform: uppercase;" pattern="[YyNn]">
     <button type="submit">Continue →</button>
   </form>
 </div>
@@ -58,12 +58,12 @@
 {% elif step == "passcode" %}
 <div class="auth-box">
   <h2>Set your passcode, {{ name }}</h2>
-  <p class="subtitle">4-digit PIN for secure access</p>
-  {% if error %}<p class="error">{{ error }}</p>{% endif %}
+  <p class="subtitle">4-digit PIN for secure access (not 0000 or 1234)</p>
+  {% if error %}<<p class="error">{{ error }}</p>{% endif %}
   <form method="POST" autocomplete="off">
     <input type="hidden" name="step" value="passcode">
-    <input type="password" name="code" placeholder="4-digit code" maxlength="4" autofocus autocomplete="new-password" inputmode="numeric" pattern="[0-9]*">
-    <input type="password" name="verify" placeholder="Verify code" maxlength="4" autocomplete="new-password" inputmode="numeric" pattern="[0-9]*">
+    <input type="password" name="code" placeholder="4-digit code" maxlength="4" autofocus autocomplete="new-password" inputmode="numeric" pattern="[0-9]{4}" required>
+    <input type="password" name="verify" placeholder="Verify code" maxlength="4" autocomplete="new-password" inputmode="numeric" pattern="[0-9]{4}" required>
     <button type="submit">Create Account</button>
   </form>
 </div>
@@ -113,10 +113,15 @@
     <h2 id="gameTitle">🔐 Secret Game</h2>
     <p class="game-info">Great seeing you here, {{name}}</p>
     
+    <div class="game-meta">
+      <span id="hintsBadge">Hints: <span id="hintsCount">0</span></span>
+      <span id="attemptsBadge">Attempts: <span id="attemptsCount">-</span></span>
+    </div>
+    
     <select id="difficulty">
-      <option value="Easy">Easy (1-50, 10 tries)</option>
-      <option value="Medium">Medium (1-100, 7 tries)</option>
-      <option value="Hard">Hard (1-200, 5 tries)</option>
+      <option value="Easy">Easy (1-50, 10 tries, 5 hints)</option>
+      <option value="Medium">Medium (1-100, 7 tries, 3 hints)</option>
+      <option value="Hard">Hard (1-200, 5 tries, 2 hints)</option>
       <option value="Nightmare">Nightmare (1-500, 5 tries, no hints)</option>
     </select>
     
@@ -203,6 +208,7 @@
     })
     .catch(err => {
       display.value = "Error";
+      console.error("Calculate error:", err);
     });
   }
 
@@ -253,6 +259,13 @@
     document.getElementById("resultLabel").className = "";
   }
 
+  function updateGameMeta(data) {
+    const hintsEl = document.getElementById("hintsCount");
+    const attemptsEl = document.getElementById("attemptsCount");
+    if (data.hints_remaining !== undefined) hintsEl.textContent = data.hints_remaining;
+    if (data.attempts !== undefined) attemptsEl.textContent = data.attempts;
+  }
+
   function startGame() {
     const difficulty = document.getElementById("difficulty").value;
     const resultLabel = document.getElementById("resultLabel");
@@ -267,13 +280,15 @@
     .then(r => r.json())
     .then(data => {
       document.getElementById("gameTitle").textContent = `Guess 1-${data.range}`;
-      resultLabel.textContent = `${data.attempts} attempts remaining • ${data.hint}`;
+      resultLabel.textContent = `${data.attempts} attempts • ${data.hint}`;
+      updateGameMeta(data);
       document.getElementById("guessInput").value = "";
       document.getElementById("guessInput").disabled = false;
       document.getElementById("guessInput").focus();
     })
     .catch(err => {
       resultLabel.textContent = "Error starting game";
+      console.error("Game start error:", err);
     });
   }
 
@@ -291,34 +306,45 @@
     fetch("/game/guess", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ guess })
+      body: JSON.stringify({ guess: parseInt(guess) })
     })
     .then(r => r.json())
     .then(data => {
       resultLabel.className = "";
+      updateGameMeta(data);
       
       switch(data.result) {
         case "correct":
-          resultLabel.textContent = `🎉 Correct! The number was ${data.number}`;
+          resultLabel.textContent = data.message;
           resultLabel.className = "success";
           input.disabled = true;
           launchFireworks();
           break;
         case "gameover":
-          resultLabel.textContent = `💀 Game Over! The number was ${data.number}`;
+          resultLabel.textContent = data.message;
           input.disabled = true;
           break;
         case "invalid":
-          resultLabel.textContent = "Please enter a valid number";
+          resultLabel.textContent = data.message;
           break;
         case "outofrange":
-          resultLabel.textContent = `Number must be between 1 and ${data.max_range}`;
+          resultLabel.textContent = data.message;
           break;
         case "wrong":
-          resultLabel.textContent = `${data.hint} • ${data.attempts} attempts left`;
-          if (data.hint.includes("HOT")) resultLabel.className = "hot";
-          else if (data.hint.includes("WARM")) resultLabel.className = "warm";
-          else if (data.hint.includes("COLD")) resultLabel.className = "cold";
+          resultLabel.textContent = data.hint;
+          // Apply temperature styling
+          if (data.temperature === "hot") resultLabel.className = "hot";
+          else if (data.temperature === "warm") resultLabel.className = "warm";
+          else if (data.temperature === "cold") resultLabel.className = "cold";
+          
+          // Show panic hint if present
+          if (data.panic_hint) {
+            setTimeout(() => {
+              resultLabel.textContent = data.panic_hint;
+              resultLabel.className = "panic";
+            }, 2000);
+          }
+          
           input.value = "";
           input.focus();
           break;
@@ -326,6 +352,7 @@
     })
     .catch(err => {
       resultLabel.textContent = "Error processing guess";
+      console.error("Guess error:", err);
     });
   }
 
