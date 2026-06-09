@@ -630,3 +630,79 @@ h1 {
   background: rgba(0, 212, 255, 0.3);
   color: white;
 }
+
+/* Game Meta Display */
+.game-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 15px;
+}
+
+#hintsBadge, #attemptsBadge {
+  font-size: 13px;
+  font-weight: 600;
+  padding: 6px 14px;
+  border-radius: 20px;
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid var(--glass-border);
+  color: var(--text-secondary);
+}
+
+#hintsBadge {
+  border-color: rgba(0, 245, 255, 0.3);
+  color: var(--accent-cyan);
+}
+
+#attemptsBadge {
+  border-color: rgba(255, 153, 0, 0.3);
+  color: var(--accent-orange);
+}
+
+/* Panic hint styling */
+#resultLabel.panic {
+  border-color: #ff4444;
+  background: rgba(255, 68, 68, 0.15);
+  color: #ff8888;
+  animation: pulse 1s ease-in-out infinite;
+  text-shadow: 0 0 10px rgba(255, 68, 68, 0.5);
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 0.8; }
+  50% { opacity: 1; }
+}
+
+/* Enhanced temperature states */
+#resultLabel.hot {
+  border-color: #ff4444;
+  background: rgba(255, 68, 68, 0.1);
+  color: #ff6666;
+  text-shadow: 0 0 10px rgba(255, 68, 68, 0.5);
+  animation: shake 0.3s ease-in-out;
+}
+
+#resultLabel.warm {
+  border-color: #ffaa00;
+  background: rgba(255, 170, 0, 0.1);
+  color: #ffcc00;
+}
+
+#resultLabel.cold {
+  border-color: #00aaff;
+  background: rgba(0, 170, 255, 0.1);
+  color: #66ccff;
+}
+
+#resultLabel.success {
+  border-color: var(--success-color);
+  background: rgba(0, 255, 136, 0.1);
+  color: var(--success-color);
+  text-shadow: 0 0 10px rgba(0, 255, 136, 0.5);
+}
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-3px); }
+  75% { transform: translateX(3px); }
+}
