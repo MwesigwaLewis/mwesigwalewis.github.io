@@ -23,7 +23,7 @@
 <div class="auth-box">
   <h2>Welcome</h2>
   <p class="subtitle">How's about we get to know you</p>
-  {% if error %}<<p class="error">{{ error }}</p>{% endif %}
+  {% if error %}<p class="error">{{ error }}</p>{% endif %}
   <form method="POST" autocomplete="off">
     <input type="hidden" name="step" value="name">
     <input type="text" name="name" placeholder="What is your name?" autofocus autocomplete="name" maxlength="50" required pattern="[A-Za-z\s]{2,50}">
@@ -35,7 +35,7 @@
 <div class="auth-box">
   <h2>Hi {{ name }}, how old are you?</h2>
   <p class="subtitle">Age verification required (15+)</p>
-  {% if error %}<<p class="error">{{ error }}</p>{% endif %}
+  {% if error %}<p class="error">{{ error }}</p>{% endif %}
   <form method="POST" autocomplete="off">
     <input type="hidden" name="step" value="age">
     <input type="number" name="age" placeholder="Your age" autofocus min="15" max="129" autocomplete="off" required>
@@ -47,7 +47,7 @@
 <div class="auth-box">
   <h2>{{ name }}, are you a student?</h2>
   <p class="subtitle">This tool is designed for educational use</p>
-  {% if error %}<<p class="error">{{ error }}</p>{% endif %}
+  {% if error %}<p class="error">{{ error }}</p>{% endif %}
   <form method="POST" autocomplete="off">
     <input type="hidden" name="step" value="student">
     <input type="text" name="identity" placeholder="Y or n" maxlength="1" autofocus autocomplete="off" style="text-transform: uppercase;" pattern="[YyNn]">
@@ -59,7 +59,7 @@
 <div class="auth-box">
   <h2>Set your passcode, {{ name }}</h2>
   <p class="subtitle">4-digit PIN for secure access (not 0000 or 1234)</p>
-  {% if error %}<<p class="error">{{ error }}</p>{% endif %}
+  {% if error %}<p class="error">{{ error }}</p>{% endif %}
   <form method="POST" autocomplete="off">
     <input type="hidden" name="step" value="passcode">
     <input type="password" name="code" placeholder="4-digit code" maxlength="4" autofocus autocomplete="new-password" inputmode="numeric" pattern="[0-9]{4}" required>
@@ -332,12 +332,10 @@
           break;
         case "wrong":
           resultLabel.textContent = data.hint;
-          // Apply temperature styling
           if (data.temperature === "hot") resultLabel.className = "hot";
           else if (data.temperature === "warm") resultLabel.className = "warm";
           else if (data.temperature === "cold") resultLabel.className = "cold";
           
-          // Show panic hint if present
           if (data.panic_hint) {
             setTimeout(() => {
               resultLabel.textContent = data.panic_hint;
