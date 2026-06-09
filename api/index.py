@@ -8,13 +8,11 @@ import hashlib
 import hmac
 from datetime import datetime
 from functools import wraps
-from flask import Flask, render_template, request, redirect, url_for, jsonify, make_response
+from flask import Flask, render_template, request, redirect, url_for, jsonify, make_response, send_from_directory
 
 # =========================
 # VERCEL PATH RESOLUTION
 # =========================
-# Vercel runs from project root, but api/ is the function entry
-# We need to resolve paths relative to this file
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TEMPLATE_DIR = os.path.join(BASE_DIR, 'templates')
 STATIC_DIR = os.path.join(BASE_DIR, 'static')
@@ -28,8 +26,14 @@ app = Flask(
 
 app.secret_key = os.environ.get("SECRET_KEY")
 if not app.secret_key:
-    # Fallback for local dev, but Vercel should always have this
     app.secret_key = os.urandom(32).hex()
+
+# =========================
+# EXPLICIT STATIC FILE SERVING (fixes Vercel styling)
+# =========================
+@app.route("/static/<path:filename>")
+def static_files(filename):
+    return send_from_directory(STATIC_DIR, filename)
 
 # =========================
 # ENTERPRISE LOGGING
@@ -464,12 +468,11 @@ def guess():
 @app.route("/logout")
 def logout():
     response = make_response(redirect(url_for("auth")))
-    # Clear session by setting empty cookie
     response.set_cookie('session', '', expires=0, httponly=True, secure=True, samesite='Strict')
     return response
 
 # =========================
-# HEALTH CHECK (CRITICAL FOR VERCEL)
+# HEALTH CHECK
 # =========================
 @app.route("/health")
 def health():
